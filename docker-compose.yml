@@ -8,6 +8,7 @@ services:
     volumes:
       - ./conf.d:/etc/nginx/conf.d:ro
       - ./certs:/etc/nginx/certs:ro
+      - /srv/static-files:/usr/share/nginx/static:ro
     networks:
       - proxy-network
     restart: unless-stopped
