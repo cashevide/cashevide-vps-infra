@@ -56,12 +56,12 @@ a SECOND VPS (a genuinely different machine). Use GitHub's
 
 ## Adding a new project (do this once per project, not once per VPS)
 
-1.  Make sure the project's own `docker-compose.yml` does NOT publish
+1. Make sure the project's own `docker-compose.yml` does NOT publish
     port 80/443 and does NOT run its own nginx service. It should only
     expose its app container on the shared network (see notes in the
     project repo itself).
 
-2.  Join the project's container to this proxy's network. In the
+2. Join the project's container to this proxy's network. In the
     project's `docker-compose.yml`, add:
 
         networks:
@@ -70,11 +70,11 @@ a SECOND VPS (a genuinely different machine). Use GitHub's
 
     and attach the app service to it.
 
-3.  Copy the sample config:
+3. Copy the sample config:
 
     cp conf.d.example/example-project.conf.sample conf.d/<projectname>.conf
 
-4.  Edit `conf.d/<projectname>.conf` and replace every `<PLACEHOLDER>`:
+4. Edit `conf.d/<projectname>.conf` and replace every `<PLACEHOLDER>`:
     - `<PROJECT_NAME>` — short id, e.g. `cashevide`
     - `<PROJECT_CONTAINER_NAME>` — must match the container_name (or
       the Compose-generated name: `<COMPOSE_PROJECT_NAME>-<service>`)
@@ -83,12 +83,12 @@ a SECOND VPS (a genuinely different machine). Use GitHub's
       container (e.g. 8000)
     - `<YOUR_DOMAIN>` — e.g. api.cashevide.com
 
-5.  Place the SSL cert + key for that domain into `certs/`.
+5. Place the SSL cert + key for that domain into `certs/`.
 
-6.  If the project serves static files locally (not via S3/R2), see
+6. If the project serves static files locally (not via S3/R2), see
     "Static files" below.
 
-7.  Reload nginx-proxy (no downtime for other projects):
+7. Reload nginx-proxy (no downtime for other projects):
 
     docker compose exec nginx-proxy nginx -s reload
 
@@ -150,3 +150,8 @@ This repo is tied to ONE physical/virtual machine. For a new VPS,
 click "Use this template" on GitHub to create a fresh, independent
 repo (e.g. `vps2-infra`) — do not reuse this repo's `certs/` content
 on a different machine (download fresh certs instead).
+
+## See also
+
+`DEPLOYMENT.md` — step-by-step deploy sequence for this specific VPS
+(fresh setup, routine redeploys, disaster recovery).
