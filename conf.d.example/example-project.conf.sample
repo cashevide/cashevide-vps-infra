@@ -1,0 +1,92 @@
+# ============================================================
+# SAMPLE nginx reverse-proxy config for ONE project
+# ============================================================
+# Copy this file to ../conf.d/yourproject.conf and edit the
+# placeholders marked with <ANGLE_BRACKETS> below.
+#
+# Each project gets its OWN file in conf.d/. nginx automatically
+# loads every *.conf file in that folder — no extra registration
+# step needed.
+# ============================================================
+
+# "upstream" = a friendly name for the backend container.
+# <PROJECT_CONTAINER_NAME> must match the container_name (or
+# service name) of the project's own docker-compose.yml, and
+# that container must be on the same Docker network as nginx-proxy
+# (see README for how to join the network).
+# <INTERNAL_PORT> is the port the app listens on INSIDE its own
+# container (e.g. 8000 for Django/Gunicorn, 8000/8080 for FastAPI).
+upstream <PROJECT_NAME>_backend {
+    server <PROJECT_CONTAINER_NAME>:<INTERNAL_PORT>;
+}
+
+# Redirect all plain HTTP to HTTPS
+server {
+    listen 80;
+    server_name <YOUR_DOMAIN>;  # e.g. api.cashevide.com
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# Main HTTPS server block
+server {
+    listen 443 ssl;
+    server_name <YOUR_DOMAIN>;  # e.g. api.cashevide.com
+
+    # Path is INSIDE the nginx-proxy container — matches the
+    # ./certs:/etc/nginx/certs mount in docker-compose.yml.
+    # Put the actual cert files in vps-infra/certs/ (never commit them).
+    ssl_certificate     /etc/nginx/certs/<YOUR_DOMAIN>.pem;
+    ssl_certificate_key /etc/nginx/certs/<YOUR_DOMAIN>.key;
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
+    add_header Referrer-Policy "no-referrer-when-downgrade";
+
+    access_log /var/log/nginx/<PROJECT_NAME>_access.log;
+    error_log  /var/log/nginx/<PROJECT_NAME>_error.log;
+
+    client_max_body_size 10M;
+
+    proxy_buffer_size       128k;
+    proxy_buffers           4 256k;
+    proxy_busy_buffers_size 256k;
+
+    proxy_read_timeout    300s;
+    proxy_connect_timeout 300s;
+    proxy_send_timeout    300s;
+
+    location / {
+        proxy_pass http://<PROJECT_NAME>_backend;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_pass_header Set-Cookie;
+    }
+
+    # Static files — served straight from the project's shared volume,
+    # NOT proxied to the app. See README for the volume-sharing note.
+    location /static/ {
+        alias /usr/share/nginx/<PROJECT_NAME>/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+    }
+
+    location /media/ {
+        alias /usr/share/nginx/<PROJECT_NAME>/media/;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+    }
+}
