@@ -1,9 +1,3 @@
-# Real nginx configs (VPS-specific, contains actual domains)
-conf.d/*.conf
-
-# But keep the folder tracked in git
-!conf.d/.gitkeep
-
 # SSL certificates (secrets - never commit these)
 certs/*
 !certs/.gitkeep
