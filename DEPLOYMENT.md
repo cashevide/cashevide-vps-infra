@@ -11,7 +11,7 @@ Do this once, in this exact order, before anything else:
 
 1. Clone this repo:
 
-    git clone <https://github.com/noufalkdlr/cashevide-vps-infra.git>
+    git clone <https://github.com/cashevide/cashevide-vps-infra.git>
     cd cashevide-vps-infra
 
 2. Create the shared static-files directory (used by all projects,
