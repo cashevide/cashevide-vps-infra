@@ -1,115 +1,105 @@
 # Deployment notes — this VPS
 
-Quick reference for deploying/redeploying Cashevide (and future
-projects) on this specific VPS. This file lives here (not in
-cashevide-api) because it's about THIS machine's setup, not about
-the Django app itself.
+Deploy/redeploy steps for Cashevide (and future projects) on this
+VPS. Lives here, not in cashevide-api, because it's about this
+machine, not the Django app.
 
-## One-time setup on a fresh VPS
-
-Do this once, in this exact order, before anything else:
+## Fresh VPS — one-time setup
 
 1. Clone this repo:
 
-    ```bash
-    git clone https://github.com/cashevide/cashevide-vps-infra.git
-    ```
-
-    ```bash
+    git clone <https://github.com/cashevide/cashevide-vps-infra.git>
     cd cashevide-vps-infra
-    ```
 
-2. Create the shared static-files directory (used by all projects,
-    see README "Static files" section):
+2. Create the shared static-files dir:
 
-        sudo mkdir -p /srv/static-files/cashevide
+    sudo mkdir -p /srv/static-files/cashevide
 
-3. Get the Cloudflare origin certificate for api.cashevide.com from
-    the Cloudflare dashboard (SSL/TLS → Origin Server) and place it
-    here:
+3. Get the Cloudflare origin cert for api.cashevide.com (Cloudflare
+    dashboard → SSL/TLS → Origin Server), place it:
 
         cashevide-vps-infra/certs/cashevide.pem
         cashevide-vps-infra/certs/cashevide.key
 
-4. Start nginx-proxy (this also creates the shared `proxy-network`):
+4. Start nginx-proxy (also creates `proxy-network`):
 
     docker compose up -d
 
-5. Clone the Cashevide API repo (separately, alongside this one, not
-    inside it):
+5. Clone Cashevide (sibling folder, not inside this repo):
 
-        cd ..
-        git clone https://github.com/cashevide/cashevide-api.git
-        cd cashevide-api
+    cd ..
+    git clone <https://github.com/cashevide/cashevide-api.git>
+    cd cashevide-api
 
-6. Add the project's `.env` file (not in git — copy from wherever
-    it's backed up, or recreate from `.env.example` if one exists).
+6. Add `.env` (not in git — restore from backup or `.env.example`).
 
 7. Start Cashevide:
 
     docker compose up -d --build
 
-8. Reload nginx-proxy so it picks up the route (only needed the very
-    first time, or after editing conf.d/cashevide.conf):
+8. Create the admin superuser (one-time — entrypoint no longer does
+    this automatically):
 
-        cd ../cashevide-vps-infra
-        docker compose exec nginx-proxy nginx -s reload
+        docker compose exec web python manage.py createsuperuser
 
-9. Check it's live: <https://api.cashevide.com>
+    Save the credentials in a password manager. Not stored anywhere
+    else.
 
-## Why the order matters
+9. Reload nginx-proxy:
 
-- `cashevide-vps-infra` must start FIRST — it creates `proxy-network`,
-  which cashevide-api's docker-compose.yml expects to already exist
-  (`external: true`). If you start cashevide-api first, it will fail
-  with a "network not found" error.
-- The static-files directory (step 2) must exist before Cashevide
-  writes to it via `collectstatic`, and before nginx-proxy tries to
-  read from it.
+    cd ../cashevide-vps-infra
+    docker compose exec nginx-proxy nginx -s reload
 
-## Routine restarts / redeploys (day-to-day)
+10. Check: <https://api.cashevide.com>
 
-Once both are already set up, for ORDINARY restarts of Cashevide
-alone (code changes, routine redeploy), you do NOT need to touch
-cashevide-vps-infra at all — nginx-proxy keeps running independently:
+**Order matters:** infra must start before Cashevide (`proxy-network`
+is external, Cashevide expects it to already exist). Static-files dir
+must exist before `collectstatic` runs.
+
+## Routine restart (day-to-day)
 
     cd cashevide-api
     docker compose down
     docker compose up -d --build
 
-This is safe on its own because `proxy-network` and
-`/srv/static-files/cashevide` already exist from the one-time setup —
-Cashevide just rejoins them.
+No need to touch cashevide-vps-infra. Superuser is untouched — old
+login still works.
 
-## When you DO need to touch cashevide-vps-infra again
+## When to touch cashevide-vps-infra
 
-- **Changed the domain, port, or container name** → edit
-  `conf.d/cashevide.conf`, then:
+| Situation                          | Action                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| Domain/port/container name changed | Edit `conf.d/cashevide.conf`, then `docker compose exec nginx-proxy nginx -s reload` |
+| Cert renewed                       | Replace files in `certs/`, then reload as above                                      |
+| nginx-proxy down after reboot      | `docker compose up -d` (should auto-restart, check `docker ps` if not)               |
 
-      docker compose exec nginx-proxy nginx -s reload
+## Restoring a database backup
 
-- **Renewed/replaced the SSL certificate** → replace the files in
-  `certs/`, then reload nginx-proxy the same way.
-- **nginx-proxy itself was stopped or the VPS rebooted and it didn't
-  come back** → from `cashevide-vps-infra/`:
+Superuser is no longer auto-created, so a fresh restore won't hit the
+old `users_user_pkey` conflict — **unless you already ran step 8** on
+this instance. If so, clear it first:
 
-      docker compose up -d
+    docker compose exec db psql -U <DB_USER> <DB_NAME> -c "DELETE FROM users_user;"
 
-  (`restart: unless-stopped` should normally bring it back
-  automatically on reboot, but check with `docker ps` if in doubt.)
+Then restore:
 
-## Full disaster recovery (VPS died, starting from nothing)
+    cat backup.sql | docker compose exec -T db psql -U <DB_USER> <DB_NAME>
 
-1. Follow "One-time setup on a fresh VPS" above, start to finish.
-2. Certs are the only thing not in git — re-download the origin
-   certificate from Cloudflare's dashboard, it doesn't need the old
-   VPS to still exist.
-3. Everything else (nginx config, docker-compose files, Cashevide
-   code) comes back from git exactly as it was.
+Expected harmless errors during restore (skip, not a failure):
+`django_content_type`, `auth_permission`, `django_migrations` —
+these are populated by migrations already. Real data (users, clients,
+invoices) should restore clean.
 
-## Quick sanity checks
+## Disaster recovery (VPS died)
+
+1. "Fresh VPS — one-time setup" above, full sequence.
+2. Restore DB backup if you have one (see above).
+3. Certs aren't in git — re-download from Cloudflare.
+4. Everything else comes back from git as-is.
+
+## Sanity checks
 
     docker ps                          # nginx-proxy + cashevide-web/db/redis all "Up"
     docker network ls | grep proxy     # proxy-network exists
-    ls /srv/static-files/cashevide     # staticfiles present after collectstatic runs
-    curl -I https://api.cashevide.com  # should return a real HTTP response, not connection refused
+    ls /srv/static-files/cashevide     # staticfiles present
+    curl -I https://api.cashevide.com  # real response, not connection refused
