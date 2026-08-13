@@ -5,6 +5,7 @@ certs/*
 # Environment files if any get added later
 .env
 .env.*
+!.env.example
 
 # OS/editor noise
 .DS_Store
