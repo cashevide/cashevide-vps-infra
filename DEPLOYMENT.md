@@ -8,41 +8,55 @@ machine, not the Django app.
 
 1. Clone this repo:
 
-    git clone <https://github.com/cashevide/cashevide-vps-infra.git>
-    cd cashevide-vps-infra
+   ```bash
+   git clone https://github.com/cashevide/cashevide-vps-infra.git
+   cd cashevide-vps-infra
+   ```
 
 2. Create the shared static-files dir:
 
-    sudo mkdir -p /srv/static-files/cashevide
+   ```bash
+   sudo mkdir -p /srv/static-files/cashevide
+   ```
 
 3. Get the Cloudflare origin cert for api.cashevide.com (Cloudflare
-    dashboard → SSL/TLS → Origin Server), place it:
+   dashboard → SSL/TLS → Origin Server), place it:
 
-        cashevide-vps-infra/certs/cashevide.pem
-        cashevide-vps-infra/certs/cashevide.key
+   ```
+   cashevide-vps-infra/certs/cashevide.pem
+   cashevide-vps-infra/certs/cashevide.key
+   ```
 
 4. Start nginx-proxy (also creates `proxy-network`):
 
-    docker compose up -d
+   ```bash
+   docker compose up -d
+   ```
 
 5. Clone Cashevide (sibling folder, not inside this repo):
 
-    cd ..
-    git clone <https://github.com/cashevide/cashevide-api.git>
-    cd cashevide-api
+   ```bash
+   cd ..
+   git clone https://github.com/cashevide/cashevide-api.git
+   cd cashevide-api
+   ```
 
 6. Add `.env` (not in git — restore from backup or `.env.example`).
-    Includes `DJANGO_SUPERUSER_USERNAME`/`PASSWORD` — entrypoint.sh
-    creates that superuser automatically on first migrate.
+   Includes `DJANGO_SUPERUSER_USERNAME`/`PASSWORD` — entrypoint.sh
+   creates that superuser automatically on first migrate.
 
 7. Start Cashevide:
 
-    docker compose up -d --build
+   ```bash
+   docker compose up -d --build
+   ```
 
 8. Reload nginx-proxy:
 
-    cd ../cashevide-vps-infra
-    docker compose exec nginx-proxy nginx -s reload
+   ```bash
+   cd ../cashevide-vps-infra
+   docker compose exec nginx-proxy nginx -s reload
+   ```
 
 9. Check: <https://api.cashevide.com>
 
@@ -52,9 +66,11 @@ must exist before `collectstatic` runs.
 
 ## Routine restart (day-to-day)
 
-    cd cashevide-api
-    docker compose down
-    docker compose up -d --build
+```bash
+cd cashevide-api
+docker compose down
+docker compose up -d --build
+```
 
 No need to touch cashevide-vps-infra. Superuser already exists in the
 DB, so entrypoint.sh's createsuperuser step just no-ops.
@@ -69,33 +85,32 @@ DB, so entrypoint.sh's createsuperuser step just no-ops.
 
 ## Backing up the database
 
-Always dump with `--clean --if-exists` — this embeds DROP/TRUNCATE
-commands in the backup file itself, so restoring it later wipes
-whatever's currently in those tables first. Without this, restoring
-into a database that already has rows (auto-created superuser, real
-signups since the backup, anything) fails with duplicate-key errors.
+Full dump — schema + data together, with `--clean --if-exists` so
+the backup file itself contains DROP commands. This means restoring
+it later wipes whatever's currently in the target tables first, no
+separate cleanup step needed.
 
-    docker compose exec db pg_dump -U <DB_USER> --data-only --clean --if-exists --disable-triggers <DB_NAME> > backup.sql
+```bash
+docker compose exec db pg_dump -U <DB_USER> --clean --if-exists <DB_NAME> > backup.sql
+```
+
+Note: `--clean` cannot be combined with `--data-only` (pg_dump will
+refuse) — this is a full dump on purpose, not data-only.
 
 ## Restoring a database backup
 
-    cat backup.sql | docker compose exec -T db psql -U <DB_USER> <DB_NAME>
+```bash
+cat backup.sql | docker compose exec -T db psql -U <DB_USER> <DB_NAME>
+```
 
-Because the backup was taken with `--clean --if-exists`, this clears
-existing rows in those tables before loading — no manual DELETE step
-needed first, regardless of what's in the DB right now (auto-created
-superuser, signups after the backup, anything).
+The `--clean --if-exists` baked into the backup drops existing
+tables/rows before recreating and reloading them — no manual DELETE
+or TRUNCATE step needed first, regardless of what's currently in the
+DB (auto-created superuser, signups after the backup, anything).
 
-This also means: restoring **replaces** current data with the
-backup's data. Anything created after the backup was taken (new
-signups, new invoices) is gone after restore — that's expected, not
-a bug.
-
-Harmless errors you may still see (skip, not a failure):
-`django_content_type`, `auth_permission`, `django_migrations` —
-these are populated by migrations already and don't carry
-`--clean` cleanup the same way. Real data (users, clients, invoices)
-should restore clean.
+This means restoring **replaces** current data with the backup's
+data. Anything created after the backup was taken is gone after
+restore — that's expected, not a bug.
 
 ## Disaster recovery (VPS died)
 
@@ -106,7 +121,9 @@ should restore clean.
 
 ## Sanity checks
 
-    docker ps                          # nginx-proxy + cashevide-web/db/redis all "Up"
-    docker network ls | grep proxy     # proxy-network exists
-    ls /srv/static-files/cashevide     # staticfiles present
-    curl -I https://api.cashevide.com  # real response, not connection refused
+```bash
+docker ps                          # nginx-proxy + cashevide-web/db/redis all "Up"
+docker network ls | grep proxy     # proxy-network exists
+ls /srv/static-files/cashevide     # staticfiles present
+curl -I https://api.cashevide.com  # real response, not connection refused
+```

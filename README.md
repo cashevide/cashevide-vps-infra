@@ -15,11 +15,13 @@ name.
 second, third, tenth project doesn't mean a new template instance —
 it means one more `.conf` file in `conf.d/`.
 
-    1 project:            3 projects:
-      conf.d/                conf.d/
-        cashevide.conf          cashevide.conf
-                                 fastapi-project.conf
-                                 express-project.conf
+```
+1 project:              3 projects:
+  conf.d/                 conf.d/
+    cashevide.conf           cashevide.conf
+                              fastapi-project.conf
+                              express-project.conf
+```
 
 nginx auto-loads every `*.conf` in `conf.d/` — no central list, no
 edits elsewhere. Each file's `server_name` keeps them from colliding.
@@ -37,7 +39,12 @@ New instance only when you provision a genuinely new VPS — use
 ## First-time setup
 
 1. Clone onto the VPS as `vps-infra` (or `vpsN-infra`).
-2. `docker compose up -d` — starts nginx-proxy, creates the network.
+2. Start nginx-proxy (also creates the shared network):
+
+   ```bash
+   docker compose up -d
+   ```
+
 3. Add projects — see below.
 
 ## Adding a project (once per project, not once per VPS)
@@ -47,13 +54,17 @@ New instance only when you provision a genuinely new VPS — use
 
 2. Join the network — in the project's `docker-compose.yml`:
 
+   ```yaml
    networks:
-   proxy-network:
-   external: true
+     proxy-network:
+       external: true
+   ```
 
 3. Copy the sample config:
 
+   ```bash
    cp conf.d.example/example-project.conf.sample conf.d/<projectname>.conf
+   ```
 
 4. Fill in `<PLACEHOLDER>`s:
    - `<PROJECT_NAME>` — short id, e.g. `cashevide`
@@ -68,7 +79,9 @@ New instance only when you provision a genuinely new VPS — use
 
 7. Reload (no downtime for other projects):
 
+   ```bash
    docker compose exec nginx-proxy nginx -s reload
+   ```
 
 ## conf.d/ is tracked — certs/ is not
 
@@ -81,18 +94,24 @@ gitignored; keys are real secrets, re-download fresh instead.
 nginx-proxy serves static files (e.g. Django Admin assets) from a
 shared host path — not through media/S3. One generic mount:
 
-    /srv/static-files  →  /usr/share/nginx/static
+```
+/srv/static-files  →  /usr/share/nginx/static
+```
 
 Each project bind-mounts its own subfolder in its OWN compose file:
 
-    volumes:
-      - /srv/static-files/<projectname>:/app/staticfiles
+```yaml
+volumes:
+  - /srv/static-files/<projectname>:/app/staticfiles
+```
 
 Reference it in that project's `conf.d/<projectname>.conf`:
 
-    location /static/ {
-        alias /usr/share/nginx/static/<projectname>/staticfiles/;
-    }
+```nginx
+location /static/ {
+    alias /usr/share/nginx/static/<projectname>/staticfiles/;
+}
+```
 
 This repo's docker-compose.yml never needs editing for a new project.
 
