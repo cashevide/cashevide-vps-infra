@@ -109,7 +109,7 @@ Reference it in that project's `conf.d/<projectname>.conf`:
 
 ```nginx
 location /static/ {
-    alias /usr/share/nginx/static/<projectname>/staticfiles/;
+    alias /usr/share/nginx/static/<projectname>/;
 }
 ```
 
