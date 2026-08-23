@@ -79,13 +79,13 @@ server {
     # Static files — served straight from the project's shared volume,
     # NOT proxied to the app. See README for the volume-sharing note.
     location /static/ {
-        alias /usr/share/nginx/<PROJECT_NAME>/staticfiles/;
+        alias /usr/share/nginx/static/<PROJECT_NAME>/;
         expires 30d;
         add_header Cache-Control "public, no-transform";
     }
 
     location /media/ {
-        alias /usr/share/nginx/<PROJECT_NAME>/media/;
+        alias /usr/share/nginx/static/<PROJECT_NAME>/media/;
         expires 30d;
         add_header Cache-Control "public, no-transform";
     }
